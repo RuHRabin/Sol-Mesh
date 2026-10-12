@@ -1,0 +1,5 @@
+{
+  "name": "sol-mesh",
+  "description": "Decentralized serverless peer-to-peer mesh messaging and direct file transfer with end-to-end encryption.",
+  "requestFramePermissions": []
+}

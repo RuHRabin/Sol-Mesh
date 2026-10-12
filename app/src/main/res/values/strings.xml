@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">sol-mesh</string>
+    <string name="network_status_online">Online &amp; Discoverable</string>
+    <string name="network_status_offline">Offline</string>
+    <string name="peer_connected">Connected</string>
+    <string name="peer_disconnected">Disconnected</string>
+    <string name="file_transfer_init">File transfer initiated</string>
+    <string name="identity_fingerprint">Cryptographic Fingerprint</string>
+    <string name="dht_discovery">Kademlia DHT Discovery</string>
+</resources>
