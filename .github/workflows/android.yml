@@ -13,14 +13,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
+      # android-actions/setup-android@v3 is broken on current runners
+      # ("Failed to find package 'tools'"). The Android SDK is preinstalled
+      # on ubuntu-latest, so we only need to accept the licenses.
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
+      # compileSdk is API 36.1; make sure the platform is present.
+      # Non-fatal: Gradle can also auto-download it once licenses are accepted.
       - name: Install Android SDK platform
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36.1" || true'
 
@@ -28,6 +33,7 @@ jobs:
         with:
           gradle-version: 9.3.1
 
+      # debug.keystore is git-ignored but referenced by the debug signing config
       - name: Create debug keystore
         run: |
           keytool -genkeypair -v -keystore debug.keystore \
@@ -36,16 +42,20 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Unit tests
-        continue-on-error: true 
+        continue-on-error: true   # don't block the APK if a test fails; check the report
         run: gradle :app:testDebugUnitTest --stacktrace
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
+      - name: Show APK output
+        run: ls -lah app/build/outputs/apk/debug/
+
       - uses: actions/upload-artifact@v4
         with:
           name: sol-mesh-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         if: always()
