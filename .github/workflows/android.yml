@@ -13,10 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # JDK 21: Robolectric's Android 16 (API 36) sandbox refuses to run on Java 17
+      # ("Android SDK 36 requires Java 21"), which made every Robolectric test fail.
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       # android-actions/setup-android@v3 is broken on current runners
       # ("Failed to find package 'tools'"). The Android SDK is preinstalled
