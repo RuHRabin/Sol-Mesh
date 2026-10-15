@@ -1,0 +1,13 @@
+package com.example.p2p
+
+enum class PeerConnectionState {
+    DISCONNECTED,
+    DISCOVERING,
+    CONNECTING,
+    AUTHENTICATING,
+    SECURE_SESSION_ESTABLISHED,
+    CONNECTED,
+    TRANSFERRING,
+    RECONNECTING,
+    FAILED
+}
