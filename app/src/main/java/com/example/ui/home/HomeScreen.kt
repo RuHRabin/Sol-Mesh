@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.PeerEntity
 import com.example.p2p.P2PNode
+import com.example.p2p.RelayClient
 import com.example.p2p.RoutingMode
 import com.example.service.P2PNodeService
 import com.example.ui.theme.RobotoMonoFontFamily
@@ -108,6 +109,9 @@ fun HomeScreen(
     val publicAddress by p2pNode.publicAddress.collectAsState()
     val natStatus by p2pNode.natStatus.collectAsState()
     var punchInput by remember { mutableStateOf("") }
+    val relayPrefs = remember { context.getSharedPreferences("sol_mesh_relay", Context.MODE_PRIVATE) }
+    var relayAddress by remember { mutableStateOf(relayPrefs.getString("relay_address", "") ?: "") }
+    var relayCode by remember { mutableStateOf("") }
 
     // Pulsing radar animation
     val infiniteTransition = rememberInfiniteTransition(label = "radar_pulse")
@@ -354,10 +358,11 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "For phones on different networks. 1) Tap the button on both phones. " +
-                            "2) Copy your address and send it to the other person in any chat app. " +
-                            "3) Paste their address below and tap Connect on both phones at about the same time. " +
-                            "Keep the app open. May not work on some mobile data networks.",
+                        text = "For phones on different networks, no server needed. 1) Tap the button on both phones. " +
+                            "2) Copy your address code and send it to the other person in any chat app. " +
+                            "3) Paste their code below and tap Connect on both phones at about the same time. " +
+                            "Keep the app open. Works best over Wi-Fi or IPv6; many mobile data networks block it " +
+                            "(then use the relay below).",
                         fontSize = 12.sp,
                         color = TerminalTextMuted
                     )
@@ -371,7 +376,7 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .testTag("find_public_address_button")
                     ) {
-                        Text("Find my internet address", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TerminalCyan)
+                        Text("Find my address code", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TerminalCyan)
                     }
 
                     publicAddress?.let { myPublic ->
@@ -398,8 +403,8 @@ fun HomeScreen(
                             Button(
                                 onClick = {
                                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    cm.setPrimaryClip(ClipData.newPlainText("Internet Address", myPublic))
-                                    Toast.makeText(context, "Internet address copied!", Toast.LENGTH_SHORT).show()
+                                    cm.setPrimaryClip(ClipData.newPlainText("Address code", myPublic))
+                                    Toast.makeText(context, "Address code copied!", Toast.LENGTH_SHORT).show()
                                 },
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
@@ -421,7 +426,7 @@ fun HomeScreen(
                         OutlinedTextField(
                             value = punchInput,
                             onValueChange = { punchInput = it },
-                            placeholder = { Text("Other phone: 203.0.113.5:9093", fontSize = 13.sp, color = TerminalTextMuted) },
+                            placeholder = { Text("Paste the other phone's code", fontSize = 13.sp, color = TerminalTextMuted) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
@@ -450,6 +455,135 @@ fun HomeScreen(
                         ) {
                             Text("Connect", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+
+                    if (natStatus.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = natStatus,
+                            fontSize = 12.sp,
+                            color = TerminalCyan
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            // Relay Card: works on ANY network, including mobile data
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("relay_connect_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = TerminalBg),
+                border = BorderStroke(1.dp, TerminalBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.NetworkWifi,
+                            contentDescription = null,
+                            tint = TerminalAmber,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Connect Via Relay Server",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TerminalTextPrimary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Works on any network, including mobile data. Both phones enter the same relay " +
+                            "address and the same code, then tap Connect. The relay only passes encrypted bytes along.",
+                        fontSize = 12.sp,
+                        color = TerminalTextMuted
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = relayAddress,
+                        onValueChange = {
+                            relayAddress = it
+                            relayPrefs.edit().putString("relay_address", it.trim()).apply()
+                        },
+                        placeholder = { Text("Relay: relay.example.com:9000", fontSize = 13.sp, color = TerminalTextMuted) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("relay_address_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = TerminalSurface,
+                            unfocusedContainerColor = TerminalSurface,
+                            focusedBorderColor = TerminalGreenBright,
+                            unfocusedBorderColor = TerminalBorder
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = relayCode,
+                            onValueChange = { relayCode = it.trim() },
+                            placeholder = { Text("Shared code", fontSize = 13.sp, color = TerminalTextMuted) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("relay_code_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = TerminalSurface,
+                                unfocusedContainerColor = TerminalSurface,
+                                focusedBorderColor = TerminalGreenBright,
+                                unfocusedBorderColor = TerminalBorder
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = { relayCode = RelayClient.generateCode() },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("relay_new_code_button")
+                        ) {
+                            Text("New code", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TerminalCyan)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (relayCode.isNotEmpty()) {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("Relay code", relayCode))
+                                    Toast.makeText(context, "Code copied!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                            modifier = Modifier.testTag("relay_copy_code_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy code", modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { p2pNode.relayConnect(relayAddress, relayCode) },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("relay_connect_button")
+                    ) {
+                        Text("Connect via relay", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
                     if (natStatus.isNotEmpty()) {

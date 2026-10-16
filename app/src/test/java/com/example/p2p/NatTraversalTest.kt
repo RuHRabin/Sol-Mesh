@@ -109,4 +109,43 @@ class NatTraversalTest {
         assertNull(NatTraversal.punch("127.0.0.1", freePort(), freePort(), totalMs = 1200, attemptMs = 300))
         assertNull(NatTraversal.punch("127.0.0.1", freePort(), freePort(), totalMs = 20_000, cancelled = { true }))
     }
+
+    @Test
+    fun shareCodeRoundTripAndTolerantParsing() {
+        val c = NatTraversal.Candidates(v4 = "203.0.113.5:9093", v6 = "[2001:db8::1]:9093")
+        assertEquals("[2001:db8::1]:9093,203.0.113.5:9093", c.toShareCode())
+        assertEquals(c, NatTraversal.parseShareCode(c.toShareCode()))
+        assertEquals(
+            NatTraversal.Candidates("1.2.3.4:5", "[::1]:9"),
+            NatTraversal.parseShareCode("  [::1]:9 ;\n 1.2.3.4:5 \n garbage ")
+        )
+        assertEquals(true, NatTraversal.parseShareCode("nothing here").isEmpty())
+    }
+
+    @Test
+    fun bothPhonesPickTheSameAddressFamilyAndExactlyOneIsInitiator() {
+        val a = NatTraversal.Candidates("1.1.1.1:1", "[2001:db8::a]:9093")
+        val b = NatTraversal.Candidates("2.2.2.2:2", "[2001:db8::b]:9093")
+        assertEquals("[2001:db8::a]:9093" to "[2001:db8::b]:9093", NatTraversal.choosePair(a, b))
+        assertEquals("[2001:db8::b]:9093" to "[2001:db8::a]:9093", NatTraversal.choosePair(b, a))
+
+        val onlyV4 = NatTraversal.Candidates("2.2.2.2:2", null)
+        assertEquals("1.1.1.1:1" to "2.2.2.2:2", NatTraversal.choosePair(a, onlyV4))
+        assertEquals("2.2.2.2:2" to "1.1.1.1:1", NatTraversal.choosePair(onlyV4, a))
+
+        assertNull(NatTraversal.choosePair(NatTraversal.Candidates(null, "[::1]:1"), onlyV4))
+
+        val (mineA, theirsA) = NatTraversal.choosePair(a, b)!!
+        assertEquals(true, (mineA < theirsA) != (theirsA < mineA))
+    }
+
+    @Test
+    fun multiaddressUnderstandsIpv6AndKeepsIpv4Behaviour() {
+        assertEquals(Multiaddress("2001:db8::1", 9091), Multiaddress.fromString("2001:db8::1"))
+        assertEquals(Multiaddress("2001:db8::1", 4000), Multiaddress.fromString("[2001:db8::1]:4000"))
+        assertEquals(Multiaddress("2001:db8::1", 4000), Multiaddress.fromString("/ip6/2001:db8::1/tcp/4000"))
+        assertEquals("/ip6/2001:db8::1/tcp/4000", Multiaddress("2001:db8::1", 4000).toString())
+        assertEquals(Multiaddress("192.168.1.5", 7000), Multiaddress.fromString("192.168.1.5:7000"))
+        assertEquals(Multiaddress("192.168.1.5", 9091), Multiaddress.fromString("192.168.1.5"))
+    }
 }

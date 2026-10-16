@@ -33,6 +33,19 @@ data class Multiaddress(
 
             // If input is standard host:port or plain IP without leading slash
             if (!clean.startsWith("/")) {
+                // [ipv6]:port
+                if (clean.startsWith("[")) {
+                    val end = clean.indexOf(']')
+                    if (end > 1) {
+                        val h = clean.substring(1, end)
+                        val p = clean.substring(end + 1).removePrefix(":").trim().toIntOrNull() ?: 9091
+                        return Multiaddress(h, p, TransportType.TCP)
+                    }
+                }
+                // bare IPv6 address (more than one colon, no brackets): default port
+                if (clean.count { it == ':' } > 1) {
+                    return Multiaddress(clean, 9091, TransportType.TCP)
+                }
                 if (clean.contains(":")) {
                     val split = clean.split(":")
                     val h = split[0].trim()

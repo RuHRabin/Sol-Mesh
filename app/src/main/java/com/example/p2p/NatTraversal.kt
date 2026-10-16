@@ -1,7 +1,11 @@
 package com.example.p2p
 
 import java.io.DataInputStream
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.Socket
 import java.security.SecureRandom
 
@@ -64,7 +68,9 @@ object NatTraversal {
             socket.reuseAddress = true
             socket.bind(InetSocketAddress(localPort))
             socket.soTimeout = timeoutMs
-            socket.connect(InetSocketAddress(host, port), timeoutMs)
+            val target = InetAddress.getAllByName(host).firstOrNull { it is Inet4Address }
+                ?: throw IllegalStateException("$host has no IPv4 address")
+            socket.connect(InetSocketAddress(target, port), timeoutMs)
 
             val txn = ByteArray(12).also { SecureRandom().nextBytes(it) }
             socket.getOutputStream().apply {
@@ -164,6 +170,67 @@ object NatTraversal {
     }
 
     /**
+     * The addresses a phone can be reached at: [v6] (a global IPv6 address; usually no NAT, only a
+     * stateful firewall) and [v4] (public IPv4 mapping found with STUN). Either may be null.
+     */
+    data class Candidates(val v4: String?, val v6: String?) {
+        fun isEmpty() = v4 == null && v6 == null
+
+        /** One line the user can copy/paste to the other phone, e.g. "[2001:db8::1]:9093,203.0.113.5:9093". */
+        fun toShareCode(): String = listOfNotNull(v6, v4).joinToString(",")
+    }
+
+    /** Parses a share code (comma / space / semicolon separated "host:port" entries). */
+    fun parseShareCode(code: String): Candidates {
+        var v4: String? = null
+        var v6: String? = null
+        for (token in code.split(',', ';', ' ', '\n', '\t')) {
+            val hp = parseHostPort(token) ?: continue
+            val formatted = format(hp.first, hp.second)
+            if (hp.first.contains(':')) { if (v6 == null) v6 = formatted } else { if (v4 == null) v4 = formatted }
+        }
+        return Candidates(v4, v6)
+    }
+
+    /** Global (publicly routable) IPv6 addresses of this device, without zone ids. */
+    fun globalIpv6Addresses(): List<String> {
+        val result = mutableListOf<String>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return result
+            for (ni in interfaces) {
+                if (!ni.isUp || ni.isLoopback) continue
+                for (addr in ni.inetAddresses) {
+                    if (addr !is Inet6Address) continue
+                    if (addr.isLoopbackAddress || addr.isLinkLocalAddress || addr.isSiteLocalAddress ||
+                        addr.isMulticastAddress || addr.isAnyLocalAddress
+                    ) continue
+                    if ((addr.address[0].toInt() and 0xFE) == 0xFC) continue // unique-local fc00::/7
+                    result.add((addr.hostAddress ?: continue).substringBefore('%'))
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return result
+    }
+
+    /** Finds both our IPv6 address (if any) and our IPv4 STUN mapping (if any). */
+    fun discoverCandidates(): Candidates {
+        val v6 = globalIpv6Addresses().firstOrNull()?.let { format(it, PUNCH_PORT) }
+        val v4 = discoverTcpMapping()
+        return Candidates(v4 = v4?.takeIf { !it.startsWith("[") }, v6 = v6)
+    }
+
+    /**
+     * Picks the address family both phones share: IPv6 if both have it, otherwise IPv4.
+     * Both phones evaluate this with the roles swapped and always agree. Returns (mine, theirs) or null.
+     */
+    fun choosePair(mine: Candidates, theirs: Candidates): Pair<String, String>? = when {
+        mine.v6 != null && theirs.v6 != null -> mine.v6 to theirs.v6
+        mine.v4 != null && theirs.v4 != null -> mine.v4 to theirs.v4
+        else -> null
+    }
+
+    /**
      * Splits "ip:port", "host:port" or "[ipv6]:port" into host and port. Returns null if invalid.
      */
     fun parseHostPort(input: String): Pair<String, Int>? {
@@ -202,14 +269,19 @@ object NatTraversal {
         localPort: Int = PUNCH_PORT,
         totalMs: Long = 30_000,
         attemptMs: Int = 1500,
-        cancelled: () -> Boolean = { false }
+        cancelled: () -> Boolean = { false },
+        localAddress: String? = null
     ): Socket? {
         val deadline = System.currentTimeMillis() + totalMs
         while (System.currentTimeMillis() < deadline && !cancelled()) {
             val socket = Socket()
             try {
                 socket.reuseAddress = true
-                socket.bind(InetSocketAddress(localPort))
+                if (localAddress != null) {
+                    socket.bind(InetSocketAddress(InetAddress.getByName(localAddress), localPort))
+                } else {
+                    socket.bind(InetSocketAddress(localPort))
+                }
                 socket.connect(InetSocketAddress(remoteHost, remotePort), attemptMs)
                 socket.tcpNoDelay = true
                 return socket

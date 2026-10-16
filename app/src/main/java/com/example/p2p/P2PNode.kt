@@ -248,8 +248,8 @@ class P2PNode(
         nodeScope.launch(Dispatchers.IO) {
             try {
                 val ma = Multiaddress.fromString(targetInput)
-                val formattedAddr = "/ip4/${ma.host}/tcp/${ma.port}"
-                val tempPeerId = "peer_${ma.host.replace(".", "_")}_${ma.port}"
+                val formattedAddr = ma.toString() // picks /ip4/, /ip6/ correctly
+                val tempPeerId = "peer_${ma.host.replace(".", "_").replace(":", "_")}_${ma.port}"
                 val tempRecord = PeerRecord(
                     peerId = tempPeerId,
                     displayName = "Device@${ma.host}",
@@ -283,7 +283,7 @@ class P2PNode(
 
     private val _publicAddress = MutableStateFlow<String?>(null)
 
-    /** Our public "ip:port" as seen from the internet, once discovered via STUN. */
+    /** Our address code (IPv6 and/or public IPv4) to copy and send to the other phone. */
     val publicAddress: StateFlow<String?> = _publicAddress.asStateFlow()
 
     private val _natStatus = MutableStateFlow("")
@@ -292,58 +292,76 @@ class P2PNode(
     val natStatus: StateFlow<String> = _natStatus.asStateFlow()
 
     private val punchRunning = AtomicBoolean(false)
+    private var myCandidates: NatTraversal.Candidates? = null
 
-    /** Asks a public STUN server for our public address so the user can copy it to the other phone. */
+    private fun rememberCandidates(c: NatTraversal.Candidates) {
+        myCandidates = c
+        _publicAddress.value = c.toShareCode()
+    }
+
+    /** Finds our IPv6 address and public IPv4 address so the user can copy them to the other phone. */
     fun discoverPublicAddress() {
         if (punchRunning.get()) return
         nodeScope.launch(Dispatchers.IO) {
             _natStatus.value = "Looking up your internet address..."
-            val addr = NatTraversal.discoverTcpMapping()
-            if (addr != null) {
-                _publicAddress.value = addr
-                _natStatus.value = "Your internet address is ready. Copy it and send it to the other person."
+            val c = NatTraversal.discoverCandidates()
+            if (!c.isEmpty()) {
+                rememberCandidates(c)
+                _natStatus.value = "Your address code is ready. Copy it and send it to the other person." +
+                    if (c.v6 == null) " (This network has no IPv6.)" else ""
             } else {
                 _publicAddress.value = null
-                _natStatus.value = "Could not reach a STUN server. Check your internet connection and try again."
+                _natStatus.value = "Could not find an internet address. Check your connection and try again."
             }
         }
     }
 
     /**
-     * Tries to open a direct connection to the other phone's public address.
+     * Tries to open a direct connection to the other phone using its address code.
      * Both phones must press this at about the same time (within ~20 seconds).
      */
     fun punchConnect(remoteInput: String) {
         if (!punchRunning.compareAndSet(false, true)) return
         nodeScope.launch(Dispatchers.IO) {
             try {
-                val remote = NatTraversal.parseHostPort(remoteInput)
-                if (remote == null) {
-                    _natStatus.value = "Invalid address. Use the form 1.2.3.4:5678"
+                val theirs = NatTraversal.parseShareCode(remoteInput)
+                if (theirs.isEmpty()) {
+                    _natStatus.value = "Invalid address code. Paste exactly what the other phone copied."
                     return@launch
                 }
-                val (host, port) = remote
-                val theirs = NatTraversal.format(host, port)
 
-                val mine = _publicAddress.value ?: NatTraversal.discoverTcpMapping()
-                if (mine == null) {
-                    _natStatus.value = "Could not find your own internet address (STUN unreachable)."
+                val mine = myCandidates ?: NatTraversal.discoverCandidates().also {
+                    if (!it.isEmpty()) rememberCandidates(it)
+                }
+                if (mine.isEmpty()) {
+                    _natStatus.value = "Could not find your own internet address. Check your connection."
                     return@launch
                 }
-                _publicAddress.value = mine
 
-                _natStatus.value = "Connecting through the NAT... keep the app open on both phones (up to 30 seconds)."
-                val socket = NatTraversal.punch(host, port)
+                val pair = NatTraversal.choosePair(mine, theirs)
+                if (pair == null) {
+                    _natStatus.value = "These two phones have no address type in common " +
+                        "(one has only IPv6, the other only IPv4)."
+                    return@launch
+                }
+                val (myAddr, theirAddr) = pair
+                val (host, port) = NatTraversal.parseHostPort(theirAddr)!!
+                val myHost = NatTraversal.parseHostPort(myAddr)!!.first
+                val isV6 = host.contains(':')
+
+                _natStatus.value = "Connecting over ${if (isV6) "IPv6" else "IPv4"}... " +
+                    "keep the app open on both phones (up to 30 seconds)."
+                val socket = NatTraversal.punch(host, port, localAddress = if (isV6) myHost else null)
                 if (socket == null) {
                     _natStatus.value = "No direct path found. One of the two networks blocks it " +
-                        "(common on mobile data). Try Wi-Fi on both phones, or the same Wi-Fi."
+                        "(common on mobile data without IPv6). Try Wi-Fi on both phones, or use a relay server."
                     return@launch
                 }
 
                 // Both phones share ONE TCP connection now. The phone with the smaller address string
                 // acts as handshake initiator, the other as responder (both sides compute the same order).
-                if (mine < theirs) {
-                    val family = if (host.contains(':')) "ip6" else "ip4"
+                if (myAddr < theirAddr) {
+                    val family = if (isV6) "ip6" else "ip4"
                     val tempPeerId = "peer_" + host.replace(".", "_").replace(":", "_") + "_" + port
                     val tempRecord = PeerRecord(
                         peerId = tempPeerId,
@@ -358,10 +376,59 @@ class P2PNode(
                 } else {
                     connectionManager.handleInboundSocket(socket)
                 }
-                _natStatus.value = "Connected through the NAT. Open the Peers tab to chat or send files."
+                _natStatus.value = "Connected. Open the Peers tab to chat or send files."
             } catch (e: Exception) {
                 Log.e(TAG, "Punch connect error: ${e.message}", e)
                 _natStatus.value = "Connection error: ${e.message}"
+            } finally {
+                punchRunning.set(false)
+            }
+        }
+    }
+
+    /**
+     * Connects to the other phone through a relay server (works on any network, including mobile data).
+     * Both phones must enter the same relay address and the same one-time code.
+     * The relay only forwards bytes; messages stay end-to-end encrypted.
+     */
+    fun relayConnect(relayInput: String, codeInput: String) {
+        if (!punchRunning.compareAndSet(false, true)) return
+        nodeScope.launch(Dispatchers.IO) {
+            try {
+                val code = codeInput.trim()
+                if (!RelayClient.isValidCode(code)) {
+                    _natStatus.value = "The code must be 8 to 64 letters or digits."
+                    return@launch
+                }
+                val relay = RelayClient.parseRelayAddress(relayInput)
+                if (relay == null) {
+                    _natStatus.value = "Invalid relay address. Use something like relay.example.com:9000"
+                    return@launch
+                }
+                _natStatus.value = "Connecting to the relay... waiting for the other phone to join with the same code (up to 2 minutes)."
+                val paired = RelayClient.join(relay.first, relay.second, code)
+                if (paired == null) {
+                    _natStatus.value = "The other phone did not join in time. Start again on both phones."
+                    return@launch
+                }
+                if (paired.initiator) {
+                    val tempRecord = PeerRecord(
+                        peerId = "peer_relay_" + code.take(8),
+                        displayName = "Device via relay",
+                        publicKeyHex = "",
+                        dhPublicKeyHex = "",
+                        addresses = emptyList(),
+                        timestamp = System.currentTimeMillis(),
+                        signatureHex = ""
+                    )
+                    connectionManager.adoptOutboundSocket(tempRecord, paired.socket)
+                } else {
+                    connectionManager.handleInboundSocket(paired.socket)
+                }
+                _natStatus.value = "Connected through the relay. Open the Peers tab to chat or send files."
+            } catch (e: Exception) {
+                Log.e(TAG, "Relay connect error: ${e.message}", e)
+                _natStatus.value = "Relay error: ${e.message}"
             } finally {
                 punchRunning.set(false)
             }
