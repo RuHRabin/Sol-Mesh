@@ -1,9 +1,9 @@
 package com.example.ui.settings
 
-import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,17 +41,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.p2p.P2PNode
 import com.example.service.P2PNodeService
-import com.example.ui.theme.RobotoMonoFontFamily
-import com.example.ui.theme.TerminalAmber
+import com.example.ui.theme.Accent
 import com.example.ui.theme.TerminalBg
 import com.example.ui.theme.TerminalBlack
-import com.example.ui.theme.TerminalBorder
-import com.example.ui.theme.TerminalGreen
-import com.example.ui.theme.TerminalGreenBright
+import com.example.ui.theme.TerminalBorderSubtle
 import com.example.ui.theme.TerminalRed
 import com.example.ui.theme.TerminalTextMuted
 import com.example.ui.theme.TerminalTextPrimary
-import com.example.ui.theme.TerminalTextPrompt
 import com.example.ui.theme.TerminalTextSecondary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,185 +56,150 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     p2pNode: P2PNode,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenIdentity: () -> Unit = {},
+    onOpenNetwork: () -> Unit = {},
+    onOpenTerminal: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val status by p2pNode.nodeStatus.collectAsState()
     var backgroundServiceEnabled by remember { mutableStateOf(true) }
     var showClearDataDialog by remember { mutableStateOf(false) }
-    val circuitStatus by p2pNode.circuitHopperManager.circuitStatus.collectAsState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(TerminalBlack)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 16.dp)
             .testTag("settings_screen"),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "DAEMON_CONFIGURATION",
-            fontFamily = RobotoMonoFontFamily,
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
-            color = TerminalTextPrompt
+            text = "Settings",
+            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+            color = TerminalTextPrimary
         )
 
-        // Ephemeral Zero Data Retention Mode
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(2.dp),
-            colors = CardDefaults.cardColors(containerColor = TerminalBg),
-            border = BorderStroke(1.dp, TerminalBorder)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = "EPHEMERAL_ZERO_DATA_RETENTION",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    color = TerminalTextPrompt
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Guarantee zero persistence: all network traffic, circuit routing, and message packets are forwarded strictly in RAM without saving any data.",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
-                    color = TerminalTextMuted
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+        // You
+        SectionLabel("You")
+        SettingsCard {
+            SettingsRow(
+                title = status.displayName.ifBlank { "Your device" },
+                subtitle = "Your name and encryption keys. Tap to view your safety number.",
+                onClick = onOpenIdentity
+            )
+        }
+
+        // Connection
+        SectionLabel("Connection")
+        SettingsCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (circuitStatus.isZeroDataRetentionActive) "[RAM_ONLY: ENFORCED]" else "[DISK_LOGS: PERMITTED]",
-                        fontFamily = RobotoMonoFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = if (circuitStatus.isZeroDataRetentionActive) TerminalGreenBright else TerminalAmber
+                        text = "Stay reachable in the background",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TerminalTextPrimary
                     )
-                    Switch(
-                        checked = circuitStatus.isZeroDataRetentionActive,
-                        onCheckedChange = {
-                            p2pNode.circuitHopperManager.toggleZeroDataRetention(it)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = TerminalGreen
-                        )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Keeps Sol Mesh running when the app is closed so friends can still reach you. Shows a notification.",
+                        fontSize = 13.sp,
+                        color = TerminalTextSecondary
                     )
                 }
+                Switch(
+                    checked = backgroundServiceEnabled,
+                    onCheckedChange = {
+                        backgroundServiceEnabled = it
+                        if (it) P2PNodeService.startService(context) else P2PNodeService.stopService(context)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Accent
+                    ),
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .testTag("background_service_switch")
+                )
             }
         }
 
-        // Background Foreground Service
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(2.dp),
-            colors = CardDefaults.cardColors(containerColor = TerminalBg),
-            border = BorderStroke(1.dp, TerminalBorder)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "SOCKET_DAEMON_PERSISTENCE",
-                            fontFamily = RobotoMonoFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            color = TerminalTextPrompt
-                        )
-                        Text(
-                            text = "Keep direct port 9091 and Kademlia UDP listening in background.",
-                            fontFamily = RobotoMonoFontFamily,
-                            fontSize = 10.sp,
-                            color = TerminalTextMuted
-                        )
-                    }
-                    Switch(
-                        checked = backgroundServiceEnabled,
-                        onCheckedChange = {
-                            backgroundServiceEnabled = it
-                            if (it) P2PNodeService.startService(context) else P2PNodeService.stopService(context)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = TerminalGreen
-                        ),
-                        modifier = Modifier.testTag("background_service_switch")
-                    )
-                }
-            }
-        }
-
-        // Clear Local SQLite Disk Cache
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(2.dp),
-            colors = CardDefaults.cardColors(containerColor = TerminalBg),
-            border = BorderStroke(1.dp, TerminalBorder)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+        // Privacy & data
+        SectionLabel("Privacy and data")
+        SettingsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "PURGE_STORAGE",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    color = TerminalTextPrompt
+                    text = "End-to-end encrypted",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TerminalTextPrimary
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Purges all local SQLite messages, cached peer contacts, and transfer logs.",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
-                    color = TerminalTextMuted
+                    text = "Only you and the person you are talking to can read messages and files. " +
+                        "Chats are stored on this phone only, not on any server.",
+                    fontSize = 13.sp,
+                    color = TerminalTextSecondary
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 OutlinedButton(
                     onClick = { showClearDataDialog = true },
-                    shape = RoundedCornerShape(2.dp),
+                    shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, TerminalRed),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalRed),
                     modifier = Modifier.testTag("clear_data_button")
                 ) {
-                    Text("$ rm -rf /data/sol-mesh.db", fontFamily = RobotoMonoFontFamily, fontSize = 11.sp)
+                    Text("Delete all chats and contacts", fontSize = 14.sp)
                 }
             }
         }
 
-        // System Kernel / About
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(2.dp),
-            colors = CardDefaults.cardColors(containerColor = TerminalBg),
-            border = BorderStroke(1.dp, TerminalBorder)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = "KERNEL_INFO",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    color = TerminalTextPrompt
+        // Advanced
+        SectionLabel("Advanced")
+        SettingsCard {
+            Column {
+                SettingsRow(
+                    title = "Network details",
+                    subtitle = "Ports, addresses and discovery status",
+                    onClick = onOpenNetwork
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                SettingsRow(
+                    title = "Terminal",
+                    subtitle = "Text commands, for developers",
+                    onClick = onOpenTerminal
+                )
+            }
+        }
+
+        // About
+        SectionLabel("About")
+        SettingsCard {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "sol-mesh Core v1.0.0-cli (Linux Android Kernel)\n" +
-                            "• Mode 1: Peer-to-peer crypto mesh (X25519, Ed25519, Double Ratchet)\n" +
-                            "• Mode 2: Decentralized dynamic public node hopping (Zero data saved)\n" +
-                            "• AEAD: AES-256-GCM 128-bit authentication tag",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
-                    lineHeight = 15.sp,
+                    text = "Sol Mesh 1.0",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TerminalTextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Peer-to-peer messaging and file transfer.\n" +
+                        "Encryption: X25519 and Ed25519 keys, Double Ratchet, AES-256-GCM.",
+                    fontSize = 13.sp,
                     color = TerminalTextSecondary
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
     }
 
     if (showClearDataDialog) {
@@ -244,43 +207,97 @@ fun SettingsScreen(
             onDismissRequest = { showClearDataDialog = false },
             title = {
                 Text(
-                    text = "$ rm -rf --purge",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 13.sp,
-                    color = TerminalRed
+                    text = "Delete everything?",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TerminalTextPrimary
                 )
             },
             text = {
                 Text(
-                    text = "Confirm total disk purge of all local messages and peer tables?",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 11.sp,
-                    color = TerminalTextPrimary
+                    text = "This removes all messages, contacts and file transfer history from this phone. It cannot be undone.",
+                    fontSize = 14.sp,
+                    color = TerminalTextSecondary
                 )
             },
             confirmButton = {
-                OutlinedButton(
+                Button(
                     onClick = {
                         CoroutineScope(Dispatchers.IO).launch {
                             p2pNode.database.clearAllTables()
                         }
-                        Toast.makeText(context, "[PURGE] LOCAL_TABLES_CLEARED", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "All chats and contacts deleted", Toast.LENGTH_SHORT).show()
                         showClearDataDialog = false
                     },
-                    shape = RoundedCornerShape(2.dp),
-                    border = BorderStroke(1.dp, TerminalRed),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalRed)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = TerminalRed)
                 ) {
-                    Text("$ confirm_purge", fontFamily = RobotoMonoFontFamily, fontSize = 11.sp)
+                    Text("Delete", fontSize = 14.sp)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearDataDialog = false }) {
-                    Text("abort", fontFamily = RobotoMonoFontFamily, fontSize = 11.sp, color = TerminalTextMuted)
+                    Text("Cancel", fontSize = 14.sp, color = TerminalTextSecondary)
                 }
             },
             containerColor = TerminalBg,
-            shape = RoundedCornerShape(2.dp)
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Accent,
+        modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+    )
+}
+
+@Composable
+private fun SettingsCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = TerminalBg),
+        border = BorderStroke(1.dp, TerminalBorderSubtle)
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SettingsRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = TerminalTextPrimary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = 13.sp,
+                color = TerminalTextSecondary
+            )
+        }
+        Text(
+            text = "\u203A",
+            fontSize = 24.sp,
+            color = TerminalTextMuted,
+            modifier = Modifier.padding(start = 12.dp)
         )
     }
 }

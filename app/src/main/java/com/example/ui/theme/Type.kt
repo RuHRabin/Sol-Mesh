@@ -12,78 +12,87 @@ val InterFontFamily = FontFamily(
     Font(R.font.inter, FontWeight.Normal)
 )
 
+/** Monospace: only for technical values such as IDs, addresses and fingerprints. */
 val RobotoMonoFontFamily = FontFamily(
     Font(R.font.roboto_mono, FontWeight.Normal)
 )
 
+// Readable defaults: Inter, body text 14-16sp, nothing below 11sp.
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 26.sp,
-        lineHeight = 32.sp,
+        fontSize = 30.sp,
+        lineHeight = 36.sp,
         letterSpacing = (-0.5).sp
     ),
-    titleLarge = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+    headlineMedium = TextStyle(
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        lineHeight = 24.sp,
+        fontSize = 24.sp,
+        lineHeight = 30.sp,
+        letterSpacing = (-0.3).sp
+    ),
+    titleLarge = TextStyle(
+        fontFamily = InterFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
         letterSpacing = (-0.2).sp
     ),
     titleMedium = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp,
-        lineHeight = 20.sp,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
         letterSpacing = 0.sp
     ),
     titleSmall = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 13.sp,
-        lineHeight = 18.sp
+        fontSize = 14.sp,
+        lineHeight = 20.sp
     ),
     bodyLarge = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+        fontFamily = InterFontFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 23.sp,
+        letterSpacing = 0.sp
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.sp
     ),
-    bodyMedium = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+    bodySmall = TextStyle(
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 17.sp,
         letterSpacing = 0.sp
     ),
-    bodySmall = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 11.sp,
-        lineHeight = 15.sp,
-        letterSpacing = 0.sp
-    ),
     labelLarge = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 18.sp,
+        letterSpacing = 0.1.sp
+    ),
+    labelMedium = TextStyle(
+        fontFamily = InterFontFamily,
+        fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.2.sp
     ),
-    labelMedium = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
+    labelSmall = TextStyle(
+        fontFamily = InterFontFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
-        lineHeight = 15.sp,
-        letterSpacing = 0.3.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = RobotoMonoFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 10.sp,
         lineHeight = 14.sp,
-        letterSpacing = 0.4.sp
+        letterSpacing = 0.3.sp
     )
 )

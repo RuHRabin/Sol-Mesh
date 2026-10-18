@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -20,8 +21,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NetworkCheck
@@ -67,6 +70,10 @@ import com.example.ui.settings.SettingsScreen
 import com.example.ui.shell.ShellScreen
 import com.example.ui.transfers.TransfersScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.Accent
+import com.example.ui.theme.AccentSoft
+import com.example.ui.theme.InterFontFamily
+import com.example.ui.theme.TerminalTextSecondary
 import com.example.ui.theme.RobotoMonoFontFamily
 import com.example.ui.theme.TerminalAmber
 import com.example.ui.theme.TerminalBg
@@ -82,9 +89,23 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var p2pNode: P2PNode
 
+    override fun onStart() {
+        super.onStart()
+        com.example.service.AppState.isForeground = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        com.example.service.AppState.isForeground = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // The app is dark only, so always use light system bar icons (even when the phone is in light mode)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
 
         p2pNode = P2PNode.getInstance(this)
         p2pNode.start()
@@ -127,14 +148,15 @@ fun SolMeshApp(p2pNode: P2PNode) {
     val showBottomBar = currentRoute?.startsWith("chat/") != true
 
     val navItems = listOf(
-        NavigationItem(Screen.Home.route, "core", Icons.Default.Home),
-        NavigationItem(Screen.Shell.route, "sh", Icons.Default.Terminal),
-        NavigationItem(Screen.Peers.route, "peers", Icons.Default.People),
-        NavigationItem(Screen.Transfers.route, "files", Icons.Default.FolderShared),
-        NavigationItem(Screen.Identity.route, "keys", Icons.Default.Security),
-        NavigationItem(Screen.NetworkStatus.route, "circuit", Icons.Default.NetworkCheck),
-        NavigationItem(Screen.Settings.route, "sys", Icons.Default.Settings)
+        NavigationItem(Screen.Home.route, "Home", Icons.Default.Home),
+        NavigationItem(Screen.Peers.route, "Chats", Icons.Default.Chat),
+        NavigationItem(Screen.Transfers.route, "Files", Icons.Default.FolderShared),
+        NavigationItem(Screen.Settings.route, "Settings", Icons.Default.Settings)
     )
+
+    // The advanced screens live under Settings, so keep the Settings tab highlighted on them
+    val advancedRoutes = setOf(Screen.Shell.route, Screen.Identity.route, Screen.NetworkStatus.route)
+    val highlightedRoute = if (currentRoute in advancedRoutes) Screen.Settings.route else currentRoute
 
     Scaffold(
         modifier = Modifier
@@ -148,7 +170,7 @@ fun SolMeshApp(p2pNode: P2PNode) {
                     modifier = Modifier.testTag("main_bottom_nav")
                 ) {
                     navItems.forEach { item ->
-                        val selected = currentRoute == item.route
+                        val selected = highlightedRoute == item.route
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -164,23 +186,23 @@ fun SolMeshApp(p2pNode: P2PNode) {
                                 Icon(
                                     imageVector = item.icon,
                                     contentDescription = item.label,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             },
                             label = {
                                 Text(
                                     text = item.label,
-                                    fontFamily = RobotoMonoFontFamily,
-                                    fontSize = 10.sp,
+                                    fontFamily = InterFontFamily,
+                                    fontSize = 12.sp,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = TerminalGreenBright,
-                                selectedTextColor = TerminalGreenBright,
-                                indicatorColor = TerminalSurface,
-                                unselectedIconColor = TerminalTextMuted,
-                                unselectedTextColor = TerminalTextMuted
+                                selectedIconColor = Accent,
+                                selectedTextColor = Accent,
+                                indicatorColor = AccentSoft,
+                                unselectedIconColor = TerminalTextSecondary,
+                                unselectedTextColor = TerminalTextSecondary
                             ),
                             modifier = Modifier.testTag("nav_item_${item.label.lowercase()}")
                         )
@@ -196,7 +218,7 @@ fun SolMeshApp(p2pNode: P2PNode) {
                 .background(TerminalBlack)
         ) {
             // High-Density Linux Polybar / Status Strip
-            TopLinuxPolybar(p2pNode = p2pNode, onOpenShell = { navController.navigate(Screen.Shell.route) })
+            if (showBottomBar) StatusStrip(p2pNode = p2pNode)
 
             NavHost(
                 navController = navController,
@@ -251,7 +273,12 @@ fun SolMeshApp(p2pNode: P2PNode) {
                 }
 
                 composable(Screen.Settings.route) {
-                    SettingsScreen(p2pNode = p2pNode)
+                    SettingsScreen(
+                        p2pNode = p2pNode,
+                        onOpenIdentity = { navController.navigate(Screen.Identity.route) },
+                        onOpenNetwork = { navController.navigate(Screen.NetworkStatus.route) },
+                        onOpenTerminal = { navController.navigate(Screen.Shell.route) }
+                    )
                 }
             }
         }
@@ -259,80 +286,47 @@ fun SolMeshApp(p2pNode: P2PNode) {
 }
 
 /**
- * High-density Linux Polybar / Tmux style status line for power users.
+ * Slim status line: tells the user in plain words whether they are online and how many chats are live.
  */
 @Composable
-fun TopLinuxPolybar(
-    p2pNode: P2PNode,
-    onOpenShell: () -> Unit
-) {
+fun StatusStrip(p2pNode: P2PNode) {
     val status by p2pNode.nodeStatus.collectAsState()
-    val circuit by p2pNode.circuitHopperManager.circuitStatus.collectAsState()
+    val connected = status.activeConnectionsCount
 
     Surface(
-        color = TerminalSurface,
-        border = BorderStroke(0.5.dp, TerminalBorder),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpenShell)
+        color = TerminalBg,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (status.isRunning) TerminalGreenBright else TerminalAmber,
+                    modifier = Modifier.size(8.dp)
+                ) {}
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "sol-mesh",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    color = TerminalGreenBright
-                )
-                Text(
-                    text = " │ ",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 11.sp,
-                    color = TerminalBorder
-                )
-                Text(
-                    text = "tcp:${status.listeningPort}",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
-                    color = TerminalTextMuted
-                )
-                Text(
-                    text = " │ ",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 11.sp,
-                    color = TerminalBorder
-                )
-                Text(
-                    text = "dht:${status.dhtRoutingTableSize}",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
-                    color = TerminalCyan
+                    text = if (status.isRunning) "Online" else "Starting...",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TerminalTextPrimary
                 )
             }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = if (circuit.mode == RoutingMode.DIRECT_P2P) "mode:p2p" else "hop:${circuit.activeNode.id.take(7)}",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (circuit.mode == RoutingMode.DIRECT_P2P) TerminalCyan else TerminalAmber
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "[sh]",
-                    fontFamily = RobotoMonoFontFamily,
-                    fontSize = 9.sp,
-                    color = TerminalGreenBright
-                )
-            }
+            Text(
+                text = when (connected) {
+                    0 -> "No one connected"
+                    1 -> "1 person connected"
+                    else -> "$connected people connected"
+                },
+                fontSize = 13.sp,
+                color = TerminalTextSecondary
+            )
         }
     }
 }

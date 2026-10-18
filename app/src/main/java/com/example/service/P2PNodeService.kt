@@ -32,6 +32,7 @@ class P2PNodeService : Service() {
 
     companion object {
         const val CHANNEL_ID = "sol_mesh_node_channel"
+        const val MESSAGES_CHANNEL_ID = "sol_mesh_messages_channel"
         const val NOTIFICATION_ID = 1001
 
         const val ACTION_START = "com.example.service.action.START"
@@ -64,8 +65,9 @@ class P2PNodeService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("sol-mesh active"))
+        startForeground(NOTIFICATION_ID, buildNotification("Sol Mesh is running"))
         p2pNode = P2PNode.getInstance(this)
+        p2pNode.chatManager.onIncomingMessage = { peerId, _ -> notifyIncomingMessage(peerId) }
         p2pNode.start()
         observeNodeStatus()
         registerNetworkCallback()
@@ -83,7 +85,11 @@ class P2PNodeService : Service() {
     private fun observeNodeStatus() {
         serviceScope.launch {
             p2pNode.nodeStatus.collectLatest { status ->
-                val text = "Port ${status.listeningPort} • ${status.activeConnectionsCount} connected • DHT ${status.dhtRoutingTableSize}"
+                val text = when (status.activeConnectionsCount) {
+                    0 -> "Running. Nobody connected yet"
+                    1 -> "Running. 1 person connected"
+                    else -> "Running. ${status.activeConnectionsCount} people connected"
+                }
                 val notification = buildNotification(text)
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.notify(NOTIFICATION_ID, notification)
@@ -118,13 +124,21 @@ class P2PNodeService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "sol-mesh Daemon",
+                "Sol Mesh running in background",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps peer-to-peer encrypted connection and DHT discovery running"
+                description = "Keeps Sol Mesh reachable so friends can connect to you"
+            }
+            val messagesChannel = NotificationChannel(
+                MESSAGES_CHANNEL_ID,
+                "New messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts you when a new message arrives"
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
+            manager.createNotificationChannel(messagesChannel)
         }
     }
 
@@ -140,7 +154,7 @@ class P2PNodeService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("sol-mesh Daemon")
+            .setContentTitle("Sol Mesh")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
@@ -155,7 +169,37 @@ class P2PNodeService : Service() {
             try { connectivityManager?.unregisterNetworkCallback(it) } catch (_: Exception) {}
         }
         serviceScope.cancel()
+        p2pNode.chatManager.onIncomingMessage = null
         p2pNode.stop()
+    }
+
+    /** Shows "New message" for a chat unless the app is on screen. The text is not shown (privacy). */
+    private fun notifyIncomingMessage(peerId: String) {
+        if (AppState.isForeground) return
+        serviceScope.launch(Dispatchers.IO) {
+            val name = p2pNode.database.peerDao().getPeer(peerId)?.displayName ?: "Someone"
+            val launchIntent = Intent(this@P2PNodeService, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                this@P2PNodeService,
+                peerId.hashCode(),
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = NotificationCompat.Builder(this@P2PNodeService, MESSAGES_CHANNEL_ID)
+                .setContentTitle(name)
+                .setContentText("New message")
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .build()
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(2000 + (peerId.hashCode() and 0xFFFF), notification)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

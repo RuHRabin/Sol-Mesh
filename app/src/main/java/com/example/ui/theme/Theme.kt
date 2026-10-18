@@ -5,14 +5,14 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val TerminalDarkColorScheme = darkColorScheme(
-    primary = TerminalGreenBright,
-    onPrimary = Color(0xFF041208),
-    primaryContainer = Color(0xFF0D2818),
-    onPrimaryContainer = TerminalGreenBright,
+private val SolMeshDarkColorScheme = darkColorScheme(
+    primary = Accent,
+    onPrimary = OnAccent,
+    primaryContainer = AccentSoft,
+    onPrimaryContainer = Color(0xFFD6E3FF),
     secondary = TerminalCyan,
     onSecondary = Color(0xFF021B27),
-    secondaryContainer = Color(0xFF0C2A3A),
+    secondaryContainer = Color(0xFF12303F),
     onSecondaryContainer = TerminalCyan,
     tertiary = TerminalAmber,
     onTertiary = Color(0xFF2E1900),
@@ -22,6 +22,8 @@ private val TerminalDarkColorScheme = darkColorScheme(
     onSurface = TerminalTextPrimary,
     surfaceVariant = TerminalSurface,
     onSurfaceVariant = TerminalTextSecondary,
+    surfaceContainer = TerminalBg,
+    surfaceContainerHigh = TerminalSurface,
     outline = TerminalBorder,
     outlineVariant = TerminalBorderSubtle,
     error = TerminalRed,
@@ -34,9 +36,9 @@ fun MyApplicationTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    // Hacker Terminal mode is permanently dark and high-contrast
+    // The app is dark only: its screens use fixed surface colors, so a light scheme would be unreadable.
     MaterialTheme(
-        colorScheme = TerminalDarkColorScheme,
+        colorScheme = SolMeshDarkColorScheme,
         typography = Typography,
         content = content
     )

@@ -20,6 +20,9 @@ interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertMessage(message: MessageEntity): Long
 
+    @Query("SELECT * FROM messages WHERE conversationPeerId = :peerId AND isOutgoing = 1 AND deliveryStatus IN ('FAILED', 'SENDING') AND timestamp > :since ORDER BY timestamp ASC")
+    suspend fun getUnsentOutgoing(peerId: String, since: Long): List<MessageEntity>
+
     @Query("UPDATE messages SET deliveryStatus = :status WHERE id = :id")
     suspend fun updateDeliveryStatus(id: String, status: String)
 
