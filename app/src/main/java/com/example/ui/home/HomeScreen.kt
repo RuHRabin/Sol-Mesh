@@ -104,7 +104,11 @@ fun HomeScreen(
     val context = LocalContext.current
     val status by p2pNode.nodeStatus.collectAsState()
     val circuitStatus by p2pNode.circuitHopperManager.circuitStatus.collectAsState()
-    val peers by p2pNode.database.peerDao().getAllPeersFlow().collectAsState(initial = emptyList())
+    val allPeers by p2pNode.database.peerDao().getAllPeersFlow().collectAsState(initial = emptyList())
+    val hiddenPending by p2pNode.contactPolicy.pending.collectAsState()
+    val hiddenBlocked by p2pNode.contactPolicy.blocked.collectAsState()
+    // People who asked to connect (not answered yet) or were blocked are not listed as "nearby"
+    val peers = allPeers.filter { it.peerId !in hiddenPending && it.peerId !in hiddenBlocked }
 
     var quickIpInput by remember { mutableStateOf("") }
     var isConnecting by remember { mutableStateOf(false) }

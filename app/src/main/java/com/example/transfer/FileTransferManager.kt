@@ -139,7 +139,16 @@ class FileTransferManager(
         }
     }
 
+    /** Decides whether files from this peer may be received at all (false until the user accepts them). */
+    @Volatile
+    var isPeerAllowed: (String) -> Boolean = { true }
+
     private suspend fun handleFileInit(env: FileEnvelope) {
+        if (!isPeerAllowed(env.senderPeerId)) {
+            Log.w(TAG, "Refused file offer from a contact that is not accepted")
+            sendError(env.senderPeerId, env.fileId, "Not accepted yet")
+            return
+        }
         // Never trust remote-supplied identifiers or sizes
         if (!FILE_ID_REGEX.matches(env.fileId) || env.senderPeerId.isEmpty()) {
             Log.w(TAG, "Rejected FILE_INIT with invalid fileId")

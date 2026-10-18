@@ -70,6 +70,7 @@ import com.example.ui.settings.SettingsScreen
 import com.example.ui.shell.ShellScreen
 import com.example.ui.transfers.TransfersScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.components.ContactRequestHost
 import com.example.ui.theme.Accent
 import com.example.ui.theme.AccentSoft
 import com.example.ui.theme.InterFontFamily
@@ -218,6 +219,7 @@ fun SolMeshApp(p2pNode: P2PNode) {
                 .background(TerminalBlack)
         ) {
             // High-Density Linux Polybar / Status Strip
+            ContactRequestHost(p2pNode = p2pNode)
             if (showBottomBar) StatusStrip(p2pNode = p2pNode)
 
             NavHost(

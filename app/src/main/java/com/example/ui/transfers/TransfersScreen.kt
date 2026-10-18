@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
 import com.example.data.TransferEntity
 import com.example.p2p.P2PNode
+import com.example.ui.components.openFile
+import com.example.ui.components.rememberFileSaver
 import com.example.ui.theme.Accent
 import com.example.ui.theme.TerminalAmber
 import com.example.ui.theme.TerminalBg
@@ -71,30 +73,7 @@ fun TransfersScreen(
     val transfers by p2pNode.database.transferDao().getAllTransfersFlow().collectAsState(initial = emptyList())
     val peers by p2pNode.database.peerDao().getAllPeersFlow().collectAsState(initial = emptyList())
     val nameById = remember(peers) { peers.associate { it.peerId to it.displayName } }
-    var pendingSave by remember { mutableStateOf<TransferEntity?>(null) }
-
-    // Received files live in the app's private storage; this lets the user copy one anywhere they like.
-    val saveLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("*/*")
-    ) { uri: Uri? ->
-        val transfer = pendingSave
-        pendingSave = null
-        if (uri != null && transfer != null) {
-            scope.launch(Dispatchers.IO) {
-                val message = try {
-                    context.contentResolver.openOutputStream(uri)?.use { out ->
-                        File(transfer.localFilePath).inputStream().use { input -> input.copyTo(out) }
-                    }
-                    "Saved ${transfer.fileName}"
-                } catch (e: Exception) {
-                    "Could not save the file: ${e.message}"
-                }
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
+    val saveFile = rememberFileSaver()
 
     Column(
         modifier = modifier
@@ -146,10 +125,8 @@ fun TransfersScreen(
                         peerName = nameById[transfer.peerId] ?: "Unknown contact",
                         onResume = { p2pNode.fileTransferManager.resumeTransfer(transfer.fileId) },
                         onCancel = { p2pNode.fileTransferManager.cancelTransfer(transfer.fileId) },
-                        onSave = {
-                            pendingSave = transfer
-                            saveLauncher.launch(transfer.fileName)
-                        }
+                        onOpen = { openFile(context, transfer.localFilePath, transfer.mimeType) },
+                        onSave = { saveFile(transfer.localFilePath, transfer.fileName) }
                     )
                 }
             }
@@ -163,6 +140,7 @@ private fun TransferCard(
     peerName: String,
     onResume: () -> Unit,
     onCancel: () -> Unit,
+    onOpen: () -> Unit,
     onSave: () -> Unit
 ) {
     val progress = if (transfer.chunksTotal > 0) {
@@ -248,8 +226,9 @@ private fun TransferCard(
 
             val canResume = transfer.status == "PAUSED" || transfer.status == "FAILED"
             val canCancel = transfer.status == "TRANSFERRING" || transfer.status == "PENDING"
+            val canOpen = transfer.status == "COMPLETED"
             val canSave = transfer.status == "COMPLETED" && !transfer.isOutgoing
-            if (canResume || canCancel || canSave) {
+            if (canResume || canCancel || canOpen) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -263,6 +242,14 @@ private fun TransferCard(
                     if (canCancel) {
                         TextButton(onClick = onCancel) {
                             Text("Cancel", fontSize = 14.sp, color = TerminalRed)
+                        }
+                    }
+                    if (canOpen) {
+                        TextButton(
+                            onClick = onOpen,
+                            modifier = Modifier.testTag("open_file_${transfer.fileId}")
+                        ) {
+                            Text("Open", fontSize = 14.sp, color = Accent)
                         }
                     }
                     if (canSave) {

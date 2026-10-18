@@ -63,6 +63,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val status by p2pNode.nodeStatus.collectAsState()
+    val blockedIds by p2pNode.contactPolicy.blocked.collectAsState()
     var backgroundServiceEnabled by remember { mutableStateOf(true) }
     var showClearDataDialog by remember { mutableStateOf(false) }
 
@@ -158,6 +159,34 @@ fun SettingsScreen(
                     modifier = Modifier.testTag("clear_data_button")
                 ) {
                     Text("Delete all chats and contacts", fontSize = 14.sp)
+                }
+            }
+        }
+
+        // Blocked people (only shown when there are any)
+        if (blockedIds.isNotEmpty()) {
+            SectionLabel("Blocked")
+            SettingsCard {
+                Column {
+                    blockedIds.forEach { blockedId ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "ID " + (if (blockedId.length > 14) blockedId.take(14) + "..." else blockedId),
+                                fontSize = 14.sp,
+                                color = TerminalTextSecondary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { p2pNode.unblockContact(blockedId) }) {
+                                Text("Unblock", fontSize = 14.sp, color = Accent)
+                            }
+                        }
+                    }
                 }
             }
         }

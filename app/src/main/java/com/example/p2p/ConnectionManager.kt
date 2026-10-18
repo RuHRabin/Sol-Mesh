@@ -40,6 +40,18 @@ class ConnectionManager(
     private val onPeerStateChanged: (String, PeerConnectionState, String?) -> Unit,
     private val onPeerRecordDiscovered: (PeerRecord) -> Unit = {}
 ) {
+    /**
+     * Called once an INBOUND peer has proven its identity, before the connection is used.
+     * The boolean says whether both people deliberately started it (no question needed).
+     * Return false to refuse the connection.
+     */
+    @Volatile
+    var onInboundAuthenticated: ((PeerRecord, Boolean) -> Boolean)? = null
+
+    /** Called once a connection WE started has been authenticated. */
+    @Volatile
+    var onOutboundAuthenticated: ((String) -> Unit)? = null
+
     companion object {
         private const val TAG = "ConnectionManager"
         private const val CONNECT_TIMEOUT_MS = 5000
@@ -153,6 +165,9 @@ class ConnectionManager(
                 delay(50)
                 setPeerState(actualRecord.peerId, PeerConnectionState.CONNECTED)
 
+                // We chose to connect to this person, so they are accepted
+                onOutboundAuthenticated?.invoke(actualRecord.peerId)
+
                 // Notify node to save authenticated peer
                 onPeerRecordDiscovered(actualRecord)
 
@@ -175,7 +190,7 @@ class ConnectionManager(
     /**
      * Handles inbound peer socket accepted by local TransportManager server.
      */
-    fun handleInboundSocket(socket: Socket) {
+    fun handleInboundSocket(socket: Socket, autoAccept: Boolean = false) {
         scope.launch(Dispatchers.IO) {
             var peerId: String? = null
             try {
@@ -185,6 +200,11 @@ class ConnectionManager(
                     return@launch
                 }
                 peerId = peerRecord.peerId
+                if (onInboundAuthenticated?.invoke(peerRecord, autoAccept) == false) {
+                    Log.i(TAG, "Refused inbound connection from a blocked peer")
+                    socket.close()
+                    return@launch
+                }
                 setPeerState(peerId, PeerConnectionState.AUTHENTICATING)
 
                 val activeConn = ActiveConnection(

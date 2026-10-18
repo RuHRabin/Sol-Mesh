@@ -12,6 +12,9 @@ interface TransferDao {
     @Query("SELECT * FROM transfers ORDER BY updatedAt DESC")
     fun getAllTransfersFlow(): Flow<List<TransferEntity>>
 
+    @Query("SELECT * FROM transfers WHERE peerId = :peerId ORDER BY createdAt ASC")
+    fun getTransfersForPeerFlow(peerId: String): Flow<List<TransferEntity>>
+
     @Query("SELECT * FROM transfers WHERE fileId = :fileId LIMIT 1")
     suspend fun getTransferByFileId(fileId: String): TransferEntity?
 

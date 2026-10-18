@@ -55,6 +55,13 @@ class P2PNode(
 
     private val nodeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** Who may talk to us: accepted people, pending requests and blocked people. */
+    val contactPolicy = ContactPolicy(SharedPrefsContactStore(context))
+
+    /** Called with (peerId, displayName) when an unknown person asks to connect. */
+    @Volatile
+    var onContactRequest: ((String, String) -> Unit)? = null
+
     val dhtManager = DhtManager(identityManager.peerId, identityManager)
 
     lateinit var connectionManager: ConnectionManager
@@ -115,6 +122,19 @@ class P2PNode(
         chatManager = ChatManager(nodeScope, database, connectionManager)
         fileTransferManager = FileTransferManager(context, nodeScope, database, connectionManager)
 
+        connectionManager.onInboundAuthenticated = { record, autoAccept ->
+            when (contactPolicy.onInbound(record.peerId, autoAccept)) {
+                ContactPolicy.Decision.REJECT -> false
+                ContactPolicy.Decision.PENDING_NEW -> {
+                    onContactRequest?.invoke(record.peerId, record.displayName)
+                    true
+                }
+                else -> true
+            }
+        }
+        connectionManager.onOutboundAuthenticated = { peerId -> contactPolicy.onOutbound(peerId) }
+        fileTransferManager.isPeerAllowed = { peerId -> contactPolicy.isAccepted(peerId) }
+
         transportManager = TransportManager(
             requestedPort = 9091,
             onInboundConnection = { socket ->
@@ -143,6 +163,14 @@ class P2PNode(
     }
 
     private fun startSubsystems() {
+        // One-time upgrade: people already in the list before requests existed stay accepted
+        try {
+            kotlinx.coroutines.runBlocking {
+                contactPolicy.migrateExisting(database.peerDao().getAllPeers().map { it.peerId })
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Contact migration skipped: ${e.message}")
+        }
         transportManager.start(nodeScope)
         val multiaddrs = transportManager.getLocalMultiaddresses()
         peerDiscovery.updateLocalAddresses(multiaddrs)
@@ -376,9 +404,10 @@ class P2PNode(
                     )
                     connectionManager.adoptOutboundSocket(tempRecord, socket)
                 } else {
-                    connectionManager.handleInboundSocket(socket)
+                    // both people started this connection on purpose, so no request is needed
+                    connectionManager.handleInboundSocket(socket, autoAccept = true)
                 }
-                _natStatus.value = "Connected. Open the Peers tab to chat or send files."
+                _natStatus.value = "Connected. Open the Chats tab to chat or send files."
             } catch (e: Exception) {
                 Log.e(TAG, "Punch connect error: ${e.message}", e)
                 _natStatus.value = "Connection error: ${e.message}"
@@ -425,9 +454,10 @@ class P2PNode(
                     )
                     connectionManager.adoptOutboundSocket(tempRecord, paired.socket)
                 } else {
-                    connectionManager.handleInboundSocket(paired.socket)
+                    // both people entered the same code, so no request is needed
+                    connectionManager.handleInboundSocket(paired.socket, autoAccept = true)
                 }
-                _natStatus.value = "Connected through the relay. Open the Peers tab to chat or send files."
+                _natStatus.value = "Connected through the relay. Open the Chats tab to chat or send files."
             } catch (e: Exception) {
                 Log.e(TAG, "Relay connect error: ${e.message}", e)
                 _natStatus.value = "Relay error: ${e.message}"
@@ -443,6 +473,35 @@ class P2PNode(
 
     fun retryMessage(messageId: String) {
         chatManager.retryMessage(messageId)
+    }
+
+    // ---- Connection requests ----
+
+    fun acceptContact(peerId: String) {
+        contactPolicy.accept(peerId)
+    }
+
+    /** "Not now": disconnects and forgets them. They are asked about again if they reconnect. */
+    fun declineContact(peerId: String) {
+        contactPolicy.decline(peerId)
+        removeContact(peerId)
+    }
+
+    fun blockContact(peerId: String) {
+        contactPolicy.block(peerId)
+        removeContact(peerId)
+    }
+
+    fun unblockContact(peerId: String) {
+        contactPolicy.unblock(peerId)
+    }
+
+    private fun removeContact(peerId: String) {
+        connectionManager.disconnect(peerId)
+        nodeScope.launch(Dispatchers.IO) {
+            database.messageDao().deleteConversation(peerId)
+            database.peerDao().deletePeer(peerId)
+        }
     }
 
     fun sendFile(recipientPeerId: String, file: File, mimeType: String = "application/octet-stream") {

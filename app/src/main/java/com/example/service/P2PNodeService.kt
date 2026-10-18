@@ -68,6 +68,7 @@ class P2PNodeService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("Sol Mesh is running"))
         p2pNode = P2PNode.getInstance(this)
         p2pNode.chatManager.onIncomingMessage = { peerId, _ -> notifyIncomingMessage(peerId) }
+        p2pNode.onContactRequest = { peerId, name -> notifyContactRequest(peerId, name) }
         p2pNode.start()
         observeNodeStatus()
         registerNetworkCallback()
@@ -170,12 +171,41 @@ class P2PNodeService : Service() {
         }
         serviceScope.cancel()
         p2pNode.chatManager.onIncomingMessage = null
+        p2pNode.onContactRequest = null
         p2pNode.stop()
+    }
+
+    /** Shows "wants to connect" when someone unknown connects while the app is not on screen. */
+    private fun notifyContactRequest(peerId: String, name: String) {
+        if (AppState.isForeground) return
+        val launchIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            peerId.hashCode(),
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
+            .setContentTitle("Connection request")
+            .setContentText("${name.ifBlank { "Someone" }} wants to connect with you")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .build()
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(3000 + (peerId.hashCode() and 0xFFFF), notification)
     }
 
     /** Shows "New message" for a chat unless the app is on screen. The text is not shown (privacy). */
     private fun notifyIncomingMessage(peerId: String) {
         if (AppState.isForeground) return
+        // Messages from someone who has not been accepted yet stay hidden, so no alert for them either
+        if (!p2pNode.contactPolicy.isAccepted(peerId)) return
         serviceScope.launch(Dispatchers.IO) {
             val name = p2pNode.database.peerDao().getPeer(peerId)?.displayName ?: "Someone"
             val launchIntent = Intent(this@P2PNodeService, MainActivity::class.java).apply {

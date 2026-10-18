@@ -53,6 +53,7 @@ import com.example.data.MessageEntity
 import com.example.data.PeerEntity
 import com.example.p2p.P2PNode
 import com.example.ui.components.ContactAvatar
+import com.example.ui.components.ContactRequestCard
 import com.example.ui.theme.Accent
 import com.example.ui.theme.RobotoMonoFontFamily
 import com.example.ui.theme.TerminalAmber
@@ -99,6 +100,8 @@ fun PeersScreen(
     val peers by p2pNode.database.peerDao().getAllPeersFlow().collectAsState(initial = emptyList())
     val recentMessages by p2pNode.database.messageDao().getRecentMessagesFlow()
         .collectAsState(initial = emptyList())
+    val pendingIds by p2pNode.contactPolicy.pending.collectAsState()
+    val blockedIds by p2pNode.contactPolicy.blocked.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var addressInput by remember { mutableStateOf("") }
@@ -112,8 +115,11 @@ fun PeersScreen(
         recentMessages.filter { !it.isOutgoing && !it.isRead }.groupingBy { it.conversationPeerId }.eachCount()
     }
 
-    val visiblePeers = remember(peers, searchQuery, lastMessageByPeer) {
+    val requestPeers = remember(peers, pendingIds) { peers.filter { it.peerId in pendingIds } }
+
+    val visiblePeers = remember(peers, searchQuery, lastMessageByPeer, pendingIds, blockedIds) {
         peers
+            .filter { it.peerId !in pendingIds && it.peerId !in blockedIds }
             .filter {
                 searchQuery.isBlank() ||
                     it.displayName.contains(searchQuery, ignoreCase = true) ||
@@ -180,7 +186,7 @@ fun PeersScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (visiblePeers.isEmpty()) {
+        if (visiblePeers.isEmpty() && requestPeers.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -211,6 +217,27 @@ fun PeersScreen(
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
+                if (requestPeers.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Requests (${requestPeers.size})",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TerminalAmber,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 8.dp)
+                        )
+                    }
+                    items(requestPeers, key = { "request_" + it.peerId }) { peer ->
+                        ContactRequestCard(
+                            name = peer.displayName.ifBlank { "Someone" },
+                            peerId = peer.peerId,
+                            onAccept = { p2pNode.acceptContact(peer.peerId) },
+                            onDecline = { p2pNode.declineContact(peer.peerId) },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(10.dp)) }
+                }
                 items(visiblePeers, key = { it.peerId }) { peer ->
                     ChatRow(
                         peer = peer,

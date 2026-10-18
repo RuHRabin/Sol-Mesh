@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- files received from other people -->
+    <files-path name="received" path="nexus_transfers/" />
+    <!-- copies of files you picked to send -->
+    <cache-path name="outgoing" path="." />
+</paths>
