@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +77,7 @@ import com.example.p2p.RelayClient
 import com.example.p2p.RoutingMode
 import com.example.service.P2PNodeService
 import com.example.ui.theme.RobotoMonoFontFamily
+import com.example.ui.theme.Accent
 import com.example.ui.theme.TerminalAmber
 import com.example.ui.theme.TerminalBg
 import com.example.ui.theme.TerminalBlack
@@ -109,6 +111,8 @@ fun HomeScreen(
     val publicAddress by p2pNode.publicAddress.collectAsState()
     val natStatus by p2pNode.natStatus.collectAsState()
     var punchInput by remember { mutableStateOf("") }
+    // 0 = same Wi-Fi, 1 = internet (no server), 2 = relay server
+    var connectMethod by remember { mutableStateOf(0) }
     val relayPrefs = remember { context.getSharedPreferences("sol_mesh_relay", Context.MODE_PRIVATE) }
     var relayAddress by remember { mutableStateOf(relayPrefs.getString("relay_address", "") ?: "") }
     var relayCode by remember { mutableStateOf("") }
@@ -167,7 +171,7 @@ fun HomeScreen(
                             ) {}
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (status.isRunning) "P2P Node Active" else "P2P Node Halted",
+                                text = if (status.isRunning) "You are online" else "You are offline",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TerminalTextPrimary
@@ -185,7 +189,7 @@ fun HomeScreen(
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = TerminalGreen
+                                checkedTrackColor = Accent
                             ),
                             modifier = Modifier.testTag("node_power_switch")
                         )
@@ -193,7 +197,7 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Share this address with another phone on the same Wi-Fi / Hotspot to connect directly:",
+                        text = "Friends on the same Wi-Fi or hotspot can connect to you with this address:",
                         fontSize = 12.sp,
                         color = TerminalTextSecondary,
                         lineHeight = 17.sp
@@ -214,9 +218,9 @@ fun HomeScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "MY DIRECT P2P ADDRESS",
+                                    text = "YOUR ADDRESS ON THIS WI-FI",
                                     fontFamily = RobotoMonoFontFamily,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TerminalCyan
                                 )
@@ -237,7 +241,7 @@ fun HomeScreen(
                                     Toast.makeText(context, "Address copied to clipboard!", Toast.LENGTH_SHORT).show()
                                 },
                                 shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                                colors = ButtonDefaults.buttonColors(containerColor = Accent),
                                 modifier = Modifier.testTag("copy_address_button")
                             ) {
                                 Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
@@ -251,6 +255,10 @@ fun HomeScreen(
         }
 
         item {
+            ConnectMethodSelector(selected = connectMethod, onSelect = { connectMethod = it })
+        }
+
+        if (connectMethod == 0) item {
             // Quick Connect Card: Connect Directly to Another Phone
             Card(
                 modifier = Modifier
@@ -270,7 +278,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Direct Connect to Other Phone",
+                            text = "Connect with an address",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TerminalTextPrimary
@@ -279,7 +287,7 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Enter the IP address shown on the other phone (e.g. 192.168.1.5 or 192.168.43.1):",
+                        text = "Type the address shown on your friend's Home screen, for example 192.168.1.5:",
                         fontSize = 12.sp,
                         color = TerminalTextMuted
                     )
@@ -319,7 +327,7 @@ fun HomeScreen(
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent),
                             modifier = Modifier.testTag("quick_connect_button")
                         ) {
                             Text("Connect", fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -329,7 +337,7 @@ fun HomeScreen(
             }
         }
 
-        item {
+        if (connectMethod == 1) item {
             // Internet Connect Card: connect to a phone on a different network (NAT hole punching)
             Card(
                 modifier = Modifier
@@ -349,7 +357,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Connect Over Internet",
+                            text = "Connect over the internet",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TerminalTextPrimary
@@ -407,7 +415,7 @@ fun HomeScreen(
                                     Toast.makeText(context, "Address code copied!", Toast.LENGTH_SHORT).show()
                                 },
                                 shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                                colors = ButtonDefaults.buttonColors(containerColor = Accent),
                                 modifier = Modifier.testTag("copy_public_address_button")
                             ) {
                                 Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp))
@@ -450,7 +458,7 @@ fun HomeScreen(
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent),
                             modifier = Modifier.testTag("punch_connect_button")
                         ) {
                             Text("Connect", fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -469,7 +477,7 @@ fun HomeScreen(
             }
         }
 
-        item {
+        if (connectMethod == 2) item {
             // Relay Card: works on ANY network, including mobile data
             Card(
                 modifier = Modifier
@@ -489,7 +497,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Connect Via Relay Server",
+                            text = "Connect through a relay server",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = TerminalTextPrimary
@@ -566,7 +574,7 @@ fun HomeScreen(
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent),
                             modifier = Modifier.testTag("relay_copy_code_button")
                         ) {
                             Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy code", modifier = Modifier.size(16.dp))
@@ -578,7 +586,7 @@ fun HomeScreen(
                     Button(
                         onClick = { p2pNode.relayConnect(relayAddress, relayCode) },
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("relay_connect_button")
@@ -598,7 +606,7 @@ fun HomeScreen(
             }
         }
 
-        item {
+        if (connectMethod == 0) item {
             // Radar Discovery Card: Scan for Nearby Phones
             Card(
                 modifier = Modifier
@@ -641,14 +649,14 @@ fun HomeScreen(
 
                         Column {
                             Text(
-                                text = "Wi-Fi & Hotspot Discovery",
+                                text = "Looking for phones nearby",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = TerminalTextPrimary
                             )
                             Text(
-                                text = "Auto-detecting devices on local subnet",
-                                fontSize = 11.sp,
+                                text = "Phones on the same Wi-Fi or hotspot appear below by themselves",
+                                fontSize = 12.sp,
                                 color = TerminalTextSecondary
                             )
                         }
@@ -664,7 +672,7 @@ fun HomeScreen(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalGreenBright),
                         modifier = Modifier.testTag("scan_now_button")
                     ) {
-                        Text("Scan Now", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Search again", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -680,7 +688,7 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Nearby Devices (${peers.size})",
+                    text = "People nearby (${peers.size})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = TerminalTextPrimary
@@ -688,7 +696,7 @@ fun HomeScreen(
 
                 if (peers.isNotEmpty()) {
                     Text(
-                        text = "Manage All",
+                        text = "See all chats",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = TerminalCyan,
@@ -729,7 +737,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Make sure both phones are connected to the same Wi-Fi or mobile hotspot. You can also connect directly by entering the other phone's IP address above.",
+                            text = "Make sure both phones are on the same Wi-Fi or hotspot. You can also connect with an address above.",
                             fontSize = 12.sp,
                             color = TerminalTextMuted,
                             lineHeight = 17.sp,
@@ -813,7 +821,7 @@ fun UserFriendlyPeerCard(
 
                 Text(
                     text = if (peer.connectionState == "CONNECTED") "Connected (E2EE Ready)" else "Discovered Nearby",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = if (peer.connectionState == "CONNECTED") TerminalGreenBright else TerminalTextMuted
                 )
             }
@@ -821,7 +829,7 @@ fun UserFriendlyPeerCard(
             Button(
                 onClick = onChat,
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = TerminalGreen),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent),
                 modifier = Modifier.testTag("chat_btn_${peer.peerId}")
             ) {
                 Icon(imageVector = Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat", modifier = Modifier.size(15.dp))
@@ -829,5 +837,60 @@ fun UserFriendlyPeerCard(
                 Text("Chat", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+/** Three ways to reach a friend. Only the cards for the chosen way are shown below it. */
+@Composable
+private fun ConnectMethodSelector(selected: Int, onSelect: (Int) -> Unit) {
+    val labels = listOf("Same Wi-Fi", "Internet", "Relay")
+    val captions = listOf(
+        "Both phones on the same Wi-Fi or hotspot. This is the easiest and most reliable way.",
+        "Works between different networks without a server. Best over Wi-Fi; many mobile data networks block it.",
+        "Works anywhere, including mobile data. Needs a relay server (see the relay folder)."
+    )
+    Column {
+        Text(
+            text = "Connect with a friend",
+            style = MaterialTheme.typography.titleMedium,
+            color = TerminalTextPrimary
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(TerminalSurface)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            labels.forEachIndexed { index, label ->
+                val isSelected = index == selected
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(if (isSelected) Accent else Color.Transparent)
+                        .clickable { onSelect(index) }
+                        .padding(vertical = 10.dp)
+                        .testTag("connect_method_$index"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isSelected) Color.White else TerminalTextSecondary
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = captions[selected.coerceIn(0, captions.size - 1)],
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = TerminalTextSecondary
+        )
     }
 }

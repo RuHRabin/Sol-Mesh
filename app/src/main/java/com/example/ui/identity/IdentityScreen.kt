@@ -72,7 +72,7 @@ fun IdentityScreen(
     val copyToClipboard: (String, String) -> Unit = { label, text ->
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText(label, text))
-        Toast.makeText(context, "[CLIPBOARD] $label COPIED", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "$label copied", Toast.LENGTH_SHORT).show()
     }
 
     Column(
@@ -85,16 +85,16 @@ fun IdentityScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = "CRYPTOGRAPHIC_KEYRING",
+            text = "Identity and keys",
             fontFamily = RobotoMonoFontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
             color = TerminalTextPrompt
         )
         Text(
-            text = "HARDWARE_HSM: AndroidKeyStore AES-256-GCM • ZERO_LEAKAGE",
+            text = "Your name, your ID and the keys that protect your chats.",
             fontFamily = RobotoMonoFontFamily,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = TerminalTextMuted
         )
 
@@ -107,9 +107,9 @@ fun IdentityScreen(
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(
-                    text = "NODE_ALIAS_IDENTIFIER",
+                    text = "Your name",
                     fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     color = TerminalTextMuted
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -145,7 +145,7 @@ fun IdentityScreen(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = TerminalGreenBright),
                             modifier = Modifier.testTag("save_display_name_button")
                         ) {
-                            Text("$ save", fontFamily = RobotoMonoFontFamily, fontSize = 11.sp)
+                            Text("Save", fontFamily = RobotoMonoFontFamily, fontSize = 12.sp)
                         }
                     }
                 } else {
@@ -183,16 +183,16 @@ fun IdentityScreen(
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
                 Text(
-                    text = "[STATUS: HARDWARE_KEYSTORE_SECURED]",
+                    text = "Private keys are protected",
                     fontFamily = RobotoMonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = TerminalGreenBright
                 )
                 Text(
-                    text = "Private master seeds encrypted inside hardware StrongBox / TEE enclave.",
+                    text = "Your private keys are encrypted with a key kept in the Android Keystore, which is hardware-backed on most phones.",
                     fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     color = TerminalTextMuted
                 )
             }
@@ -200,25 +200,25 @@ fun IdentityScreen(
 
         // PeerID
         TerminalIdentityKeyCard(
-            title = "MULTIHASH_PEER_ID",
+            title = "Your ID",
             value = identityManager.peerId,
-            desc = "libp2p sha256 multihash standard (0x12 0x20 ...)",
+            desc = "Others use this to find and recognise you.",
             onCopy = { copyToClipboard("PEER_ID", identityManager.peerId) }
         )
 
         // Ed25519
         TerminalIdentityKeyCard(
-            title = "PUB_KEY_ED25519 (SIGNING)",
+            title = "Signing key (public)",
             value = identityManager.getPublicKeyHex(),
-            desc = "RFC 8032 signature verification key",
+            desc = "Lets others check that messages really come from you.",
             onCopy = { copyToClipboard("ED25519_PUB", identityManager.getPublicKeyHex()) }
         )
 
         // X25519
         TerminalIdentityKeyCard(
-            title = "PUB_KEY_X25519 (AGREEMENT)",
+            title = "Encryption key (public)",
             value = identityManager.getDhPublicKeyHex(),
-            desc = "RFC 7748 Montgomery Diffie-Hellman key",
+            desc = "Used to agree on a secret key with each contact.",
             onCopy = { copyToClipboard("X25519_PUB", identityManager.getDhPublicKeyHex()) }
         )
 
@@ -231,10 +231,10 @@ fun IdentityScreen(
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
                 Text(
-                    text = "VISUAL_FINGERPRINT_BLOCK",
+                    text = "Your fingerprint",
                     fontFamily = RobotoMonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = TerminalTextPrompt
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -248,7 +248,7 @@ fun IdentityScreen(
                         text = identityManager.getFormattedFingerprint(),
                         fontFamily = RobotoMonoFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         color = TerminalGreenBright,
                         modifier = Modifier.padding(10.dp),
                         lineHeight = 16.sp
@@ -282,7 +282,7 @@ fun TerminalIdentityKeyCard(
                     text = title,
                     fontFamily = RobotoMonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = TerminalTextPrompt
                 )
                 IconButton(onClick = onCopy, modifier = Modifier.size(24.dp)) {
@@ -304,7 +304,7 @@ fun TerminalIdentityKeyCard(
                 Text(
                     text = value,
                     fontFamily = RobotoMonoFontFamily,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     color = TerminalTextPrimary,
                     modifier = Modifier.padding(8.dp)
                 )
@@ -313,7 +313,7 @@ fun TerminalIdentityKeyCard(
             Text(
                 text = desc,
                 fontFamily = RobotoMonoFontFamily,
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 color = TerminalTextMuted
             )
         }

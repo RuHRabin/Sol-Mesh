@@ -101,6 +101,8 @@ class P2PNode(
                     database.peerDao().updateConnectionState(peerId, state.name)
                     if (state == PeerConnectionState.CONNECTED) {
                         database.peerDao().updateOnlineStatus(peerId, true, System.currentTimeMillis())
+                        // deliver anything written while this peer was offline
+                        chatManager.retryUnsent(peerId)
                     }
                     updateStatus()
                 }
@@ -439,8 +441,12 @@ class P2PNode(
         chatManager.sendMessage(recipientPeerId, text)
     }
 
-    fun sendFile(recipientPeerId: String, file: File) {
-        fileTransferManager.sendFile(recipientPeerId, file)
+    fun retryMessage(messageId: String) {
+        chatManager.retryMessage(messageId)
+    }
+
+    fun sendFile(recipientPeerId: String, file: File, mimeType: String = "application/octet-stream") {
+        fileTransferManager.sendFile(recipientPeerId, file, mimeType)
     }
 
     private fun updateStatus() {

@@ -67,16 +67,16 @@ fun NetworkStatusScreen(
     ) {
         item {
             Text(
-                text = "NETSTAT_DIAGNOSTICS",
+                text = "Network details",
                 fontFamily = RobotoMonoFontFamily,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 color = TerminalTextPrompt
             )
             Text(
-                text = "SOCKET_SUBSYSTEM: IPv4/IPv6 • KADEMLIA_XOR_METRIC • NONCE_SYNC",
+                text = "Technical information about how this phone connects to others.",
                 fontFamily = RobotoMonoFontFamily,
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 color = TerminalTextMuted
             )
         }
@@ -91,10 +91,10 @@ fun NetworkStatusScreen(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = "SOCKET_BINDINGS_LISTEN",
+                        text = "Listening on",
                         fontFamily = RobotoMonoFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         color = TerminalTextPrompt
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -105,17 +105,17 @@ fun NetworkStatusScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "REFLEX_NAT_PUBLIC_IP: ${status.observedPublicAddress ?: "resolving_via_dht"}",
+                        text = "Public address: ${status.observedPublicAddress ?: "not found yet"}",
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = TerminalCyan
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "LOCAL_INTERFACE_ADDRESSES:",
+                        text = "Addresses on this network:",
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = TerminalTextMuted
                     )
                     status.localAddresses.forEach { addr ->
@@ -130,7 +130,7 @@ fun NetworkStatusScreen(
                             Text(
                                 text = addr,
                                 fontFamily = RobotoMonoFontFamily,
-                                fontSize = 10.sp,
+                                fontSize = 12.sp,
                                 color = TerminalTextPrimary,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
@@ -155,26 +155,26 @@ fun NetworkStatusScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "KADEMLIA_DHT_ROUTING_TABLE",
+                            text = "Discovery network",
                             fontFamily = RobotoMonoFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = TerminalTextPrompt
                         )
                         Text(
-                            text = "[${status.dhtRoutingTableSize} NODES]",
+                            text = "${status.dhtRoutingTableSize} known",
                             fontFamily = RobotoMonoFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             color = TerminalGreenBright
                         )
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Metric: d(x, y) = x ^ y across 256 k-buckets (k=20). Presence TTL: 300s.",
+                        text = "Phones and servers this app knows about, used to find people outside your Wi-Fi.",
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = TerminalTextMuted
                     )
                 }
@@ -183,10 +183,10 @@ fun NetworkStatusScreen(
 
         item {
             Text(
-                text = "COMMUNITY_BOOTSTRAP_RELAYS",
+                text = "Starting servers for discovery",
                 fontFamily = RobotoMonoFontFamily,
                 fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = TerminalTextPrompt
             )
         }
@@ -207,13 +207,13 @@ fun NetworkStatusScreen(
                         Text(
                             text = nodeAddr,
                             fontFamily = RobotoMonoFontFamily,
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             color = TerminalTextPrimary
                         )
                         Text(
-                            text = "public dht gateway node",
+                            text = "discovery server",
                             fontFamily = RobotoMonoFontFamily,
-                            fontSize = 9.sp,
+                            fontSize = 11.sp,
                             color = TerminalTextMuted
                         )
                     }
@@ -249,13 +249,13 @@ fun TerminalNetstatRow(proto: String, bind: String, state: String) {
         Text(
             text = "$proto  $bind",
             fontFamily = RobotoMonoFontFamily,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = TerminalTextPrimary
         )
         Text(
             text = state,
             fontFamily = RobotoMonoFontFamily,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = TerminalGreenBright
         )
     }

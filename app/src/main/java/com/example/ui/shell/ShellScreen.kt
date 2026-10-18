@@ -193,7 +193,7 @@ fun ShellScreen(
                     Text(
                         text = ":$chip",
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = when (chip) {
                             "hop" -> TerminalAmber
@@ -224,13 +224,13 @@ fun ShellScreen(
                     Text(
                         text = "${line.timestamp} ",
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = TerminalTextMuted
                     )
                     Text(
                         text = "${line.prefix} ",
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = when (line.prefix) {
                             "[BOOT]", "[SYS]" -> TerminalCyan
@@ -244,7 +244,7 @@ fun ShellScreen(
                     Text(
                         text = line.text,
                         fontFamily = RobotoMonoFontFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         color = line.color,
                         lineHeight = 15.sp,
                         modifier = Modifier.weight(1f)
@@ -271,7 +271,7 @@ fun ShellScreen(
                     text = "sol-mesh:~$ ",
                     fontFamily = RobotoMonoFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     color = TerminalTextPrompt
                 )
 
@@ -281,7 +281,7 @@ fun ShellScreen(
                         onValueChange = { inputCommand = it },
                         textStyle = TextStyle(
                             fontFamily = RobotoMonoFontFamily,
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
                             color = TerminalTextPrimary
                         ),
                         cursorBrush = SolidColor(TerminalGreenBright),
@@ -298,14 +298,14 @@ fun ShellScreen(
                             Text(
                                 text = "type command (e.g. 'help', 'hop', 'peers')",
                                 fontFamily = RobotoMonoFontFamily,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = TerminalTextMuted
                             )
                             Spacer(modifier = Modifier.width(2.dp))
                             Text(
                                 text = "█",
                                 fontFamily = RobotoMonoFontFamily,
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = TerminalGreenBright.copy(alpha = cursorAlpha)
                             )
                         }
