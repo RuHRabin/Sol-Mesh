@@ -32,6 +32,22 @@ class ChatManager(
     var onIncomingMessage: ((String, String) -> Unit)? = null
 
     /**
+     * Leaves a message in the server mailbox when the person is not connected: (peerId, messageId, text,
+     * timestamp) -> true if the server took it. Set by the node; null when no server is configured.
+     */
+    @Volatile
+    var offlineSender: (suspend (String, String, String, Long) -> Boolean)? = null
+
+    private suspend fun sendViaMailbox(peerId: String, messageId: String, text: String, timestamp: Long): Boolean {
+        val sender = offlineSender ?: return false
+        return try {
+            sender(peerId, messageId, text, timestamp)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Sends a text message to a connected peer.
      */
     fun sendMessage(recipientPeerId: String, text: String) {
@@ -61,7 +77,8 @@ class ChatManager(
                 targetMessageId = messageId
             )
 
-            val ok = connectionManager.sendMessage(recipientPeerId, payload)
+            val ok = connectionManager.sendMessage(recipientPeerId, payload) ||
+                sendViaMailbox(recipientPeerId, messageId, trimmed, timestamp)
             if (ok) {
                 database.messageDao().updateDeliveryStatus(messageId, "SENT")
             } else {
@@ -105,6 +122,31 @@ class ChatManager(
     }
 
     /**
+     * Stores a message that arrived through the server mailbox. Returns true when it is safe for the server
+     * to delete it (stored now, or already stored earlier).
+     */
+    suspend fun receiveOfflineMessage(senderPeerId: String, messageId: String, text: String, timestamp: Long): Boolean {
+        val now = System.currentTimeMillis()
+        val entity = MessageEntity(
+            id = messageId,
+            conversationPeerId = senderPeerId,
+            senderPeerId = senderPeerId,
+            recipientPeerId = "self",
+            content = text,
+            // the time the sender wrote it, but never from the future and not absurdly old
+            timestamp = timestamp.coerceIn(now - 30L * 24 * 60 * 60 * 1000, now),
+            deliveryStatus = "RECEIVED",
+            isOutgoing = false,
+            isRead = false
+        )
+        val rowId = database.messageDao().insertMessage(entity)
+        if (rowId != -1L) {
+            onIncomingMessage?.invoke(senderPeerId, text)
+        }
+        return true
+    }
+
+    /**
      * Retries one message that failed (or got stuck while sending).
      * Safe to repeat: the receiver ignores a message id it already has.
      */
@@ -137,7 +179,8 @@ class ChatManager(
             text = message.content,
             targetMessageId = messageId
         )
-        val ok = connectionManager.sendMessage(message.conversationPeerId, payload)
+        val ok = connectionManager.sendMessage(message.conversationPeerId, payload) ||
+            sendViaMailbox(message.conversationPeerId, messageId, message.content, message.timestamp)
         database.messageDao().updateDeliveryStatus(messageId, if (ok) "SENT" else "FAILED")
         return ok
     }

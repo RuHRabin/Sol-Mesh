@@ -57,6 +57,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,6 +86,7 @@ import com.example.ui.theme.TerminalBorder
 import com.example.ui.theme.TerminalCyan
 import com.example.ui.theme.TerminalGreen
 import com.example.ui.theme.TerminalGreenBright
+import kotlinx.coroutines.delay
 import com.example.ui.theme.TerminalSurface
 import com.example.ui.theme.TerminalTextMuted
 import com.example.ui.theme.TerminalTextPrimary
@@ -117,9 +119,17 @@ fun HomeScreen(
     var punchInput by remember { mutableStateOf("") }
     // 0 = same Wi-Fi, 1 = internet (no server), 2 = relay server
     var connectMethod by remember { mutableStateOf(0) }
+    val mailboxStatus by p2pNode.mailboxStatus.collectAsState()
     val relayPrefs = remember { context.getSharedPreferences("sol_mesh_relay", Context.MODE_PRIVATE) }
     var relayAddress by remember { mutableStateOf(relayPrefs.getString("relay_address", "") ?: "") }
     var relayCode by remember { mutableStateOf("") }
+
+    // A saved (or changed) server address connects the offline-message mailbox, after a short pause so
+    // typing is not interrupted. Does nothing if the same server is already connected.
+    LaunchedEffect(relayAddress) {
+        delay(1200)
+        p2pNode.restartMailbox()
+    }
 
     // Pulsing radar animation
     val infiniteTransition = rememberInfiniteTransition(label = "radar_pulse")
@@ -586,6 +596,19 @@ fun HomeScreen(
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Offline messages: " + if (mailboxStatus.isEmpty()) {
+                            "off. Enter your server address above and messages to people who are offline will be kept for them."
+                        } else {
+                            mailboxStatus
+                        },
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = if (mailboxStatus == "Connected") TerminalGreenBright else TerminalTextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Button(
                         onClick = { p2pNode.relayConnect(relayAddress, relayCode) },

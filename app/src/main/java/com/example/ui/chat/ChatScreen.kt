@@ -234,6 +234,9 @@ fun ChatScreen(
     val saveFile = rememberFileSaver()
 
     val isOnline = peer?.connectionState == "CONNECTED" || p2pNode.connectionManager.isConnected(peerId)
+    val mailboxStatus by p2pNode.mailboxStatus.collectAsState()
+    // true when a server address is saved and working, so messages to an offline person are kept there
+    val offlineDelivery = mailboxStatus == "Connected" || mailboxStatus == "Connecting..."
     val contactName = peer?.displayName ?: "Unknown contact"
 
     // Bubbles take at most 78% of the screen width, like other messengers
@@ -375,7 +378,12 @@ fun ChatScreen(
         if (!isOnline) {
             Surface(color = TerminalAmber.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "$contactName is offline. Messages you write now will be sent when you are connected again.",
+                    text = if (offlineDelivery) {
+                        "$contactName is offline. Your messages will be delivered when they are back. " +
+                            "The server keeps them for up to 14 days."
+                    } else {
+                        "$contactName is offline. Messages you write now will be sent when you are connected again."
+                    },
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
                     color = TerminalAmber,
