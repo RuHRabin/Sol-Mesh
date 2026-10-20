@@ -1,0 +1,18 @@
+[Unit]
+Description=sol-mesh server (relay + offline mailbox)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=solmesh
+WorkingDirectory=/opt/sol-mesh
+Environment=MAILBOX_DB=/opt/sol-mesh/mailbox.db
+ExecStart=/usr/bin/python3 /opt/sol-mesh/relay_server.py 9000
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/opt/sol-mesh
+
+[Install]
+WantedBy=multi-user.target
