@@ -2,7 +2,10 @@ package com.example.p2p
 
 import android.content.Context
 import android.util.Log
+import com.example.crypto.Curve25519
 import com.example.crypto.IdentityManager
+import com.example.crypto.OfflineMessage
+import com.example.crypto.SealedBox
 import com.example.data.AppDatabase
 import com.example.data.PeerEntity
 import com.example.messaging.ChatManager
@@ -133,6 +136,9 @@ class P2PNode(
             }
         }
         connectionManager.onOutboundAuthenticated = { peerId -> contactPolicy.onOutbound(peerId) }
+        chatManager.offlineSender = { peerId, messageId, text, timestamp ->
+            sendOffline(peerId, messageId, text, timestamp)
+        }
         fileTransferManager.isPeerAllowed = { peerId -> contactPolicy.isAccepted(peerId) }
 
         transportManager = TransportManager(
@@ -194,6 +200,9 @@ class P2PNode(
                 dhtManager.pingNode(Multiaddress.fromString(bootstrapStr))
             } catch (_: Exception) {}
         }
+
+        // Offline messages, if a server address is saved
+        restartMailbox()
     }
 
     private fun handleDiscoveredPeer(record: PeerRecord) {
@@ -467,6 +476,112 @@ class P2PNode(
         }
     }
 
+    // ---- Offline messages: a mailbox on the relay server ----
+
+    private val relayPrefs by lazy { context.getSharedPreferences("sol_mesh_relay", Context.MODE_PRIVATE) }
+    private val _mailboxStatus = MutableStateFlow("")
+
+    /** Plain-language state of the offline-message connection. Empty when no server address is saved. */
+    val mailboxStatus: StateFlow<String> = _mailboxStatus.asStateFlow()
+
+    @Volatile
+    private var mailboxSubscriber: MailboxSubscriber? = null
+    private var mailboxServer: Pair<String, Int>? = null
+
+    private fun savedServer(): Pair<String, Int>? =
+        RelayClient.parseRelayAddress(relayPrefs.getString("relay_address", "") ?: "")
+
+    private fun mailboxIdentity() = MailboxIdentity(identityManager.ed25519PublicKey) { message ->
+        Curve25519.ed25519Sign(identityManager.ed25519PrivateKey, message)
+    }
+
+    /**
+     * Connects to the mailbox on the server address saved in the Home screen, so messages left while this
+     * phone was offline arrive, and new ones arrive instantly. Safe to call often: it does nothing if the
+     * connection to the same server is already up, unless [force] is set.
+     */
+    @Synchronized
+    fun restartMailbox(force: Boolean = false) {
+        val server = savedServer()
+        if (!force && server != null && server == mailboxServer && mailboxSubscriber != null) return
+
+        mailboxSubscriber?.stop()
+        mailboxSubscriber = null
+        mailboxServer = server
+        if (server == null) {
+            _mailboxStatus.value = ""
+            return
+        }
+        val subscriber = MailboxSubscriber(
+            host = server.first,
+            port = server.second,
+            identity = mailboxIdentity(),
+            onMessage = { _, _, blob -> handleOfflineBlob(blob) },
+            onStatus = { _mailboxStatus.value = it }
+        )
+        mailboxSubscriber = subscriber
+        subscriber.start()
+    }
+
+    @Synchronized
+    private fun stopMailbox() {
+        mailboxSubscriber?.stop()
+        mailboxSubscriber = null
+        mailboxServer = null
+        _mailboxStatus.value = ""
+    }
+
+    /**
+     * Opens one message from the mailbox. Returns true when the server may delete it: it was stored, or it
+     * is not worth keeping. Returns false to keep it on the server (the sender is waiting for an answer to
+     * their connection request, or storing failed), so it is offered again later.
+     */
+    private fun handleOfflineBlob(blob: ByteArray): Boolean {
+        val opened = SealedBox.open(blob, identityManager.x25519PrivateKey, identityManager.x25519PublicKey)
+            ?: return true // damaged, or not for us
+        val senderId = IdentityManager.derivePeerId(opened.senderPublicKey)
+        return when {
+            contactPolicy.isBlocked(senderId) -> true
+            contactPolicy.isAccepted(senderId) -> try {
+                kotlinx.coroutines.runBlocking {
+                    chatManager.receiveOfflineMessage(
+                        senderId, opened.message.id, opened.message.text, opened.message.timestamp
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not store an offline message: ${e.message}")
+                false
+            }
+            contactPolicy.isPending(senderId) -> false
+            else -> true // a stranger we never talked to
+        }
+    }
+
+    /** Seals a text message to the person's long-term key and leaves it in their mailbox. */
+    private suspend fun sendOffline(peerId: String, messageId: String, text: String, timestamp: Long): Boolean {
+        val server = savedServer() ?: return false
+        val peer = database.peerDao().getPeer(peerId) ?: return false
+        val sealed = try {
+            val recipientEd = IdentityManager.hexToBytes(peer.publicKeyHex)
+            val recipientDh = IdentityManager.hexToBytes(peer.dhPublicKeyHex)
+            if (recipientEd.size != 32 || recipientDh.size != 32) return false
+            Pair(
+                MailboxClient.mailboxIdOf(recipientEd),
+                SealedBox.seal(
+                    identityManager.ed25519PrivateKey,
+                    identityManager.ed25519PublicKey,
+                    recipientDh,
+                    OfflineMessage(messageId, timestamp, text)
+                )
+            )
+        } catch (e: Exception) {
+            return false
+        }
+        val result = MailboxClient.put(server.first, server.second, mailboxIdentity(), sealed.first, sealed.second)
+        if (!result.ok) Log.w(TAG, "Mailbox put failed: ${result.error}")
+        return result.ok
+    }
+
     fun sendMessage(recipientPeerId: String, text: String) {
         chatManager.sendMessage(recipientPeerId, text)
     }
@@ -479,6 +594,8 @@ class P2PNode(
 
     fun acceptContact(peerId: String) {
         contactPolicy.accept(peerId)
+        // messages they left while the request was open are still on the server: fetch them now
+        restartMailbox(force = true)
     }
 
     /** "Not now": disconnects and forgets them. They are asked about again if they reconnect. */
@@ -524,6 +641,7 @@ class P2PNode(
 
     fun stop() {
         startRequested.set(false)
+        stopMailbox()
         circuitHopperManager.stop()
         peerDiscovery.stop()
         dhtManager.stop()
